@@ -15,6 +15,7 @@ import (
 
 const poznan_zone_id = "24e12e20-0851-5354-e2c3-04b16c4c9c45"
 const warsaw_zone_id  = "0daeacdb-7b1b-f510-d44e-ec8fd457d7aa"
+const os_id = "2268" //debian TODO make it customable
 
 type Client struct {
 	url string
@@ -92,23 +93,29 @@ func GetClient(apiKey, apiSecret, region string) *Client {
 	return client
 }
 
-func (c* Client) GetMachine(vm_id string) *MachineDetails {
-	response := c.SendRequest("virtual-machines/" + vm_id, "GET", []byte(""))
+func (c* Client) GetMachine(vm_id string) (*MachineDetails, error) {
+	response, err := c.SendRequest("virtual-machines/" + vm_id, "GET", []byte(""))
+	if err != nil {
+		return nil, err
+	}
 	var machine MachineDetailsWrapper
 	json.Unmarshal([]byte(response), &machine)
-	return &machine.Machine
+	return &machine.Machine, nil
 }
 
 // returns true if machine deleted successfully
-func (c* Client) DeleteMachine(vm_id string) bool {
-	response := c.SendRequest("virtual-machines/" + vm_id, "DELETE", []byte(""))
+func (c* Client) DeleteMachine(vm_id string) (bool, error) {
+	response, err := c.SendRequest("virtual-machines/" + vm_id, "DELETE", []byte(""))
+	if err != nil {
+		return nil, err
+	}
 	var success Success
 	json.Unmarshal([]byte(response), &success)
-	return success.Success
+	return success.Success, nil
 }
 
 // Create machine and return machine ID
-func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) string {
+func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) (string, error) {
 	zone_id := ""
 	if c.region == "eu-poland-1warszawa" {
 		zone_id = warsaw_zone_id
@@ -121,81 +128,96 @@ func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) string {
 		Zone_id: zone_id,
 		Name: name,
 		Boot_type: "image",
-		Os: "2268", //ubuntu
-		//Password: "kali1",
+		Os: os_id,
 		Key_id: key_id,
 	}
 
 	str, err := json.Marshal(CreateMachineWrapper{machine})
 	if err != nil {
-		fmt.Println("Cannot marshal CreateMachine struct")
+		return nil, err
 	}
 
-	fmt.Println(string(str))
-	response := c.SendRequest("virtual-machines", "PUT", str)
+	response, err := c.SendRequest("virtual-machines", "PUT", str)
+	if err != nil {
+		return nil, err
+	}
 
 	var r CreateMachineResponse
 	json.Unmarshal([]byte(response), &r)
-	fmt.Println(r)
-	return r.MachineId.Id
+	return r.MachineId.Id, nil
 }
 
-func (c *Client) GetRegions() string {
-	response := string(c.SendRequest("regions", "GET", []byte("")))
-	fmt.Println(response)
-	return response
-}
-
-func (c *Client) GetTemplates() string {
-	response := c.SendRequest("templates", "GET", []byte(""))
-	var x map[string]interface{}
-	json.Unmarshal([]byte(response), &x)
-
-	fmt.Println(x["templates"])
+func (c *Client) GetRegions() (string, error) {
+	response, err := c.SendRequest("regions", "GET", []byte(""))
+	if err != nil {
+		return nil, err
+	}
 	return string(response)
 }
 
-func (c *Client) GetAccount() Account {
-	response := string(c.SendRequest("account", "GET", []byte("")))
-	var account AccountWrapper
-	json.Unmarshal([]byte(response), &account)
-	return account.Account
+func (c *Client) GetTemplates() (string, error) {
+	response, err := c.SendRequest("templates", "GET", []byte(""))
+	if err != nil {
+		return nil, err
+	}
+	var x map[string]interface{}
+	json.Unmarshal([]byte(response), &x)
+
+	return string(response), nil
 }
 
-func (c *Client) GetKeyIdByName(keyName string) int {
-	account := c.GetAccount()
+func (c *Client) GetAccount() (Account, error) {
+	response, err := c.SendRequest("account", "GET", []byte(""))
+	if err != nil {
+		return nil, err
+	}
+	var account AccountWrapper
+	json.Unmarshal([]byte(response), &account)
+	return account.Account, nil
+}
+
+func (c *Client) GetKeyIdByName(keyName string) (int, error) {
+	account, err := c.GetAccount()
+	if err != nil {
+		return nil, err
+	}
 	for {
 		sshkey := account.SshKeys[0]
 		if sshkey.Name == keyName {
-			return sshkey.Id
+			return sshkey.Id, nil
 		}
 	}
-	return 0
+	return nil, fmt.Errorf("Cannot find SshKey with name = %s", keyName)
 }
 
-func (c *Client) SendRequest(path, method string, reqBody []byte) []byte {
-	req := GetRequest(method, c.url + path, c.apiKey, c.apiSecret, reqBody)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+func (c *Client) SendRequest(path, method string, reqBody []byte) ([]byte, error) {
+	req, err := CreateRequest(method, c.url + path, c.apiKey, c.apiSecret, reqBody)
 	if err != nil {
-		fmt.Println(resp)
-		fmt.Println(err)
+		return nil, err
+	}
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	//fmt.Println(string(body))
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
-	return body
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Error while making API call. Request: %s, Status code: %s, response: %s", req, resp.StatusCode, body)
+	}
+	return body, nil
 }
 
-func GetRequest(method, url, apiKey, apiSecret string, body []byte) *http.Request {
+func CreateRequest(method, url, apiKey, apiSecret string, body []byte) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	x_date := time.Now().Format(time.RFC1123)
@@ -204,7 +226,7 @@ func GetRequest(method, url, apiKey, apiSecret string, body []byte) *http.Reques
 	sign := ComputeHmac256(requestString, apiSecret)
 	req.Header.Set("Authorization", apiKey + ":" + sign)
 
-	return req
+	return req, nil
 }
 
 func ComputeHmac256(message string, secret string) string {
@@ -217,8 +239,6 @@ func ComputeHmac256(message string, secret string) string {
 func GetRequestString(method, uri, x_date, body string) string {
 	parsedUrl, err := url.Parse(uri)
 	if err != nil {
-		fmt.Println("Cannot parse url: " + uri)
-		fmt.Println(err)
 		return ""
 	}
 	result := ""

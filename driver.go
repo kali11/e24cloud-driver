@@ -23,6 +23,7 @@ type Driver struct {
 	Region     string
 	SSHKeyId   int
 	SSHKey     string
+	SSHKeyName string
 }
 
 // Flags - driver params passed from command line
@@ -54,6 +55,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.ApiSecret = flags.String("e24cloud_apisecret")
 	d.Region = "eu-poland-1warszawa"
 	d.SSHKey = "/home/piotr/Pulpit/id_rsa"
+	d.SSHKeyName = "piotrkey"
 	return nil
 }
 
@@ -70,14 +72,10 @@ func (d *Driver) GetURL() (string, error) {
 }
 
 func (d *Driver) GetSSHHostname() (string, error) {
-	log.Info("GetSSHHostname")
-	log.Info(d.GetSSHKeyPath())
-	log.Info(d.GetIP())
 	return d.GetIP()
 }
 
 func (d *Driver) GetSSHUsername() string {
-	log.Info("GetSSHUSername")
 	return "e24"
 }
 
@@ -101,7 +99,10 @@ func (d *Driver) createSSHKey() (string, error) {
 
 func (d *Driver) GetState() (state.State, error) {
 	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
-	machine := client.GetMachine(d.InstanceId)
+	machine, err := client.GetMachine(d.InstanceId)
+	if err != nil {
+		return state.None, err
+	}
 	switch machine.State {
 	case "online":
 		return state.Running, nil
@@ -121,32 +122,34 @@ func (d *Driver) Create() error {
 	log.SetDebug(true)
 	log.Info("Creating e24cloud instance...")
 
-	//log.Info("Creating SSH key...")
-	//key, err := d.createSSHKey()
-	//if err != nil {
-	//	return err
-	//}
-
-
-	// tworzenie klienta
 	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
 
-	d.SSHKeyId = client.GetKeyIdByName("piotrkey")
+	SSHKeyId, err := client.GetKeyIdByName(d.SSHKeyName)
+	if err != nil {
+		return err
+	}
+	d.SSHKeyId = SSHKeyId
 	if err := copySSHKey(d.SSHKey, d.GetSSHKeyPath()); err != nil {
 		return err
 	}
-	// call do api
-	vm_id := client.CreateMachine(d.MachineName, 1, 512, d.SSHKeyId)
 
-	// zapisanie machineId
+	vm_id, err := client.CreateMachine(d.MachineName, 1, 512, d.SSHKeyId)
+	if err != nil {
+		log.Error("Cannot create machine by API")
+		return err
+	}
+
 	d.InstanceId = vm_id
 
-	// poczekanie na adres ip
 	log.Info("Waiting for the ip address...")
 	var Ip string
 	for {
-		machine := client.GetMachine(vm_id)
-		if machine.State == "online" {
+		machine, err := client.GetMachine(vm_id)
+		if err != nil {
+			log.Errorf("Cannot aquire details about machine with id = %s", vm_id)
+			return err
+		}
+		if machine.State == "online" { // TODO
 			Ip = machine.Ip.Ip
 			break
 		} else {

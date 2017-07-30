@@ -107,7 +107,7 @@ func (c* Client) GetMachine(vm_id string) (*MachineDetails, error) {
 func (c* Client) DeleteMachine(vm_id string) (bool, error) {
 	response, err := c.SendRequest("virtual-machines/" + vm_id, "DELETE", []byte(""))
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	var success Success
 	json.Unmarshal([]byte(response), &success)
@@ -134,12 +134,12 @@ func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) (string, 
 
 	str, err := json.Marshal(CreateMachineWrapper{machine})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	response, err := c.SendRequest("virtual-machines", "PUT", str)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	var r CreateMachineResponse
@@ -150,15 +150,15 @@ func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) (string, 
 func (c *Client) GetRegions() (string, error) {
 	response, err := c.SendRequest("regions", "GET", []byte(""))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return string(response)
+	return string(response), nil
 }
 
 func (c *Client) GetTemplates() (string, error) {
 	response, err := c.SendRequest("templates", "GET", []byte(""))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	var x map[string]interface{}
 	json.Unmarshal([]byte(response), &x)
@@ -166,20 +166,20 @@ func (c *Client) GetTemplates() (string, error) {
 	return string(response), nil
 }
 
-func (c *Client) GetAccount() (Account, error) {
+func (c *Client) GetAccount() (*Account, error) {
 	response, err := c.SendRequest("account", "GET", []byte(""))
 	if err != nil {
 		return nil, err
 	}
 	var account AccountWrapper
 	json.Unmarshal([]byte(response), &account)
-	return account.Account, nil
+	return &account.Account, nil
 }
 
 func (c *Client) GetKeyIdByName(keyName string) (int, error) {
 	account, err := c.GetAccount()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	for {
 		sshkey := account.SshKeys[0]
@@ -187,7 +187,7 @@ func (c *Client) GetKeyIdByName(keyName string) (int, error) {
 			return sshkey.Id, nil
 		}
 	}
-	return nil, fmt.Errorf("Cannot find SshKey with name = %s", keyName)
+	return 0, fmt.Errorf("Cannot find SshKey with name = %s", keyName)
 }
 
 func (c *Client) SendRequest(path, method string, reqBody []byte) ([]byte, error) {

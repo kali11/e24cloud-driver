@@ -19,7 +19,7 @@ type Driver struct {
 	InstanceId string
 	Region     string
 	SSHKeyId   int
-	SSHKey     string
+	SSHKeyPath     string
 	SSHKeyName string
 }
 
@@ -38,6 +38,30 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Usage: "e24cloud api secret",
 			Value: "",
 		},
+		mcnflag.StringFlag{
+			EnvVar: "E24CLOUD_REGION",
+			Name: "e24cloud_region",
+			Usage: "eu-poland-1warszawa or eu-poland-1poznan",
+			Value: "eu-poland-1warszawa",
+		},
+		mcnflag.StringFlag{
+			EnvVar: "E24CLOUD_SSHKEYNAME",
+			Name: "e24cloud_sshkeyname",
+			Usage: "e24cloud ssh key name",
+			Value: "",
+		},
+		mcnflag.StringFlag{
+			EnvVar: "E24CLOUD_SSHKEYPATH",
+			Name: "e24cloud_sshkeypath",
+			Usage: "path to ssh private key for given key name",
+			Value: "",
+		},
+	}
+}
+
+func (d *Driver) PreCreateCheck() error {
+	if d.Region == "" {
+		return fmt.Errorf("empty region")
 	}
 }
 
@@ -50,9 +74,9 @@ func (d *Driver) DriverName() string {
 func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.ApiKey = flags.String("e24cloud_apikey")
 	d.ApiSecret = flags.String("e24cloud_apisecret")
-	d.Region = "eu-poland-1warszawa"
-	d.SSHKey = "/home/piotr/Pulpit/id_rsa"
-	d.SSHKeyName = "piotrkey"
+	d.Region = flags.String("e24cloud_region")
+	d.SSHKeyPath = flags.String("e24cloud_sshkeypath")
+	d.SSHKeyName = flags.String("e24cloud_sshkeyname")
 	return nil
 }
 
@@ -106,7 +130,7 @@ func (d *Driver) Create() error {
 		return err
 	}
 	d.SSHKeyId = SSHKeyId
-	if err := copySSHKey(d.SSHKey, d.GetSSHKeyPath()); err != nil {
+	if err := copySSHKey(d.SSHKeyPath, d.GetSSHKeyPath()); err != nil {
 		return err
 	}
 

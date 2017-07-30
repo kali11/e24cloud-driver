@@ -119,7 +119,7 @@ func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) (string, 
 	zone_id := ""
 	if c.region == "eu-poland-1warszawa" {
 		zone_id = warsaw_zone_id
-	} else {
+	} else if c.region == "eu-poland-1poznan" {
 		zone_id = poznan_zone_id
 	}
 	machine := CreateMachine{

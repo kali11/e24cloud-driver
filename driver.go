@@ -24,7 +24,6 @@ type Driver struct {
 	SSHKeyName string
 	Cpus	string
 	Ram	string
-	Client *Client
 }
 
 // Flags - driver params passed from command line
@@ -76,15 +75,12 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 }
 
 func (d *Driver) GetClient() *Client {
-	if d.Client == nil {
-		client := new(Client)
-		client.url = "https://" + d.Region + ".api.e24cloud.com/v2/"
-		client.region = d.Region
-		client.apiKey = d.ApiKey
-		client.apiSecret = d.ApiSecret
-		d.Client = client
-	}
-	return d.Client
+	client := new(Client)
+	client.url = "https://" + d.Region + ".api.e24cloud.com/v2/"
+	client.region = d.Region
+	client.apiKey = d.ApiKey
+	client.apiSecret = d.ApiSecret
+	return client
 }
 
 func (d *Driver) PreCreateCheck() error {

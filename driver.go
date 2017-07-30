@@ -61,8 +61,27 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 
 func (d *Driver) PreCreateCheck() error {
 	if d.Region == "" {
-		return fmt.Errorf("empty region")
+		return fmt.Errorf("Empty region")
 	}
+	if d.Region != "eu-poland-1warszawa" && d.Region != "eu-poland-1poznan" {
+		return fmt.Errorf("Invalid region: %s", d.Region)
+	}
+	if d.ApiSecret == "" {
+		return fmt.Errorf("Empty API secret")
+	}
+	if d.ApiKey == "" {
+		return fmt.Errorf("Empty API key")
+	}
+	if d.SSHKeyName == "" {
+		return fmt.Errorf("Empty ssh key name")
+	}
+	if d.SSHKeyPath == "" {
+		return fmt.Errorf("Empty ssh private key path")
+	}
+	if _, err := os.Stat(d.SSHKeyPath); os.IsNotExist(err) {
+		return fmt.Errorf("SSH private key does not exist: %q", d.SSHKeyPath)
+	}
+	return nil
 }
 
 // DriverName returns the name of the driver

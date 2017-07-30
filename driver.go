@@ -75,13 +75,13 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 	}
 }
 
-func (d *Driver) GetClient(apiKey, apiSecret, region string) *Client {
+func (d *Driver) GetClient() *Client {
 	if d.Client == nil {
 		client := new(Client)
-		client.url = "https://" + region + ".api.e24cloud.com/v2/"
-		client.region = region
-		client.apiKey = apiKey
-		client.apiSecret = apiSecret
+		client.url = "https://" + d.Region + ".api.e24cloud.com/v2/"
+		client.region = d.Region
+		client.apiKey = d.ApiKey
+		client.apiSecret = d.ApiSecret
 		d.Client = client
 	}
 	return d.Client
@@ -163,7 +163,7 @@ func (d *Driver) GetSSHUsername() string {
 }
 
 func (d *Driver) GetState() (state.State, error) {
-	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client := d.GetClient()
 	machine, err := client.GetMachine(d.InstanceId)
 	if err != nil {
 		return state.None, err
@@ -186,7 +186,7 @@ func (d *Driver) Create() error {
 	log.SetDebug(true)
 	log.Info("Creating e24cloud instance...")
 
-	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client := d.GetClient()
 
 	SSHKeyId, err := client.GetKeyIdByName(d.SSHKeyName)
 	if err != nil {
@@ -226,15 +226,18 @@ func (d *Driver) Create() error {
 }
 
 func (d *Driver) Start() error {
-	return fmt.Errorf("Starting machine needs to be implemented")
+	d.GetClient().PowerOn(d.InstanceId)
+	return nil
 }
 
 func (d *Driver) Stop() error {
-	return fmt.Errorf("Stopping machine needs to be implemented")
+	d.GetClient().ShutDown(d.InstanceId)
+	return nil
 }
 
 func (d *Driver) Restart() error {
-	return fmt.Errorf("Restarting machine needs to be implemented")
+	d.GetClient().Reboot(d.InstanceId)
+	return nil
 }
 
 func (d *Driver) Kill() error {
@@ -242,8 +245,7 @@ func (d *Driver) Kill() error {
 }
 
 func (d *Driver) Remove() error {
-	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
-	client.DeleteMachine(d.InstanceId)
+	d.GetClient().DeleteMachine(d.InstanceId)
 	return nil
 }
 

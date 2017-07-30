@@ -107,6 +107,38 @@ func (c* Client) DeleteMachine(vm_id string) (bool, error) {
 	return success.Success, nil
 }
 
+// send shutdown request
+func (c *Client) ShutDown(vm_id string) (bool, error) {
+	response, err := c.SendRequest("virtual-machines/" + vm_id + "/shutdown", "POST", []byte(""))
+	if err != nil {
+		return false, err
+	}
+	var success Success
+	json.Unmarshal([]byte(response), &success)
+	return success.Success, nil
+}
+
+// power on machine
+func (c *Client) PowerOn(vm_id string) (bool, error) {
+	response, err := c.SendRequest("virtual-machines/" + vm_id + "/poweron", "POST", []byte(""))
+	if err != nil {
+		return false, err
+	}
+	var success Success
+	json.Unmarshal([]byte(response), &success)
+	return success.Success, nil
+}
+
+func (c *Client) Reboot(vm_id string) (bool, error) {
+	response, err := c.SendRequest("virtual-machines/" + vm_id + "/reboot", "POST", []byte(""))
+	if err != nil {
+		return false, err
+	}
+	var success Success
+	json.Unmarshal([]byte(response), &success)
+	return success.Success, nil
+}
+
 // Create machine and return machine ID
 func (c *Client) CreateMachine(name , cpus, ram string, key_id int) (string, error) {
 	zone_id := ""

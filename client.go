@@ -85,14 +85,6 @@ type AccountWrapper struct {
 type Success struct {
 	Success bool `json:"success"`
 }
-func GetClient(apiKey, apiSecret, region string) *Client {
-	client := new(Client)
-	client.url = "https://" + region + ".api.e24cloud.com/v2/"
-	client.region = region
-	client.apiKey = apiKey
-	client.apiSecret = apiSecret
-	return client
-}
 
 func (c* Client) GetMachine(vm_id string) (*MachineDetails, error) {
 	response, err := c.SendRequest("virtual-machines/" + vm_id, "GET", []byte(""))

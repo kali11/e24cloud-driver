@@ -24,6 +24,7 @@ type Driver struct {
 	SSHKeyName string
 	Cpus	string
 	Ram	string
+	Client *Client
 }
 
 // Flags - driver params passed from command line
@@ -72,6 +73,18 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Value: "512",
 		},
 	}
+}
+
+func (d *Driver) GetClient(apiKey, apiSecret, region string) *Client {
+	if d.Client == nil {
+		client := new(Client)
+		client.url = "https://" + region + ".api.e24cloud.com/v2/"
+		client.region = region
+		client.apiKey = apiKey
+		client.apiSecret = apiSecret
+		d.Client = client
+	}
+	return d.Client
 }
 
 func (d *Driver) PreCreateCheck() error {
@@ -150,7 +163,7 @@ func (d *Driver) GetSSHUsername() string {
 }
 
 func (d *Driver) GetState() (state.State, error) {
-	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
 	machine, err := client.GetMachine(d.InstanceId)
 	if err != nil {
 		return state.None, err
@@ -173,7 +186,7 @@ func (d *Driver) Create() error {
 	log.SetDebug(true)
 	log.Info("Creating e24cloud instance...")
 
-	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
 
 	SSHKeyId, err := client.GetKeyIdByName(d.SSHKeyName)
 	if err != nil {
@@ -229,7 +242,7 @@ func (d *Driver) Kill() error {
 }
 
 func (d *Driver) Remove() error {
-	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client := d.GetClient(d.ApiKey, d.ApiSecret, d.Region)
 	client.DeleteMachine(d.InstanceId)
 	return nil
 }

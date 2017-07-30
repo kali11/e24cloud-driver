@@ -2,14 +2,11 @@ package e24cloud
 
 import (
 	"fmt"
-
 	"github.com/docker/machine/libmachine/drivers"
 	"github.com/docker/machine/libmachine/mcnflag"
 	"github.com/docker/machine/libmachine/state"
 	"github.com/docker/machine/libmachine/log"
 	"time"
-	"github.com/docker/machine/libmachine/ssh"
-	"io/ioutil"
 	"github.com/docker/machine/libmachine/mcnutils"
 	"os"
 )
@@ -60,7 +57,6 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 }
 
 func (d *Driver) GetURL() (string, error) {
-	log.Info("GetURL")
 	ip, err := d.GetIP()
 	if err != nil {
 		return "", err
@@ -77,24 +73,6 @@ func (d *Driver) GetSSHHostname() (string, error) {
 
 func (d *Driver) GetSSHUsername() string {
 	return "e24"
-}
-
-func (d *Driver) publicSSHKeyPath() string {
-	log.Info("publicSSHKeyPath")
-	return d.GetSSHKeyPath() + ".pub"
-}
-
-func (d *Driver) createSSHKey() (string, error) {
-	if err := ssh.GenerateSSHKey(d.GetSSHKeyPath()); err != nil {
-		return "", err
-	}
-
-	publicKey, err := ioutil.ReadFile(d.publicSSHKeyPath())
-	if err != nil {
-		return "", err
-	}
-
-	return string(publicKey), nil
 }
 
 func (d *Driver) GetState() (state.State, error) {
@@ -115,7 +93,6 @@ func (d *Driver) GetState() (state.State, error) {
 	}
 	return state.None, nil
 }
-
 
 // Create instance
 func (d *Driver) Create() error {
@@ -149,16 +126,15 @@ func (d *Driver) Create() error {
 			log.Errorf("Cannot aquire details about machine with id = %s", vm_id)
 			return err
 		}
-		if machine.State == "online" { // TODO
+		if machine.Ip.Ip != "" {
 			Ip = machine.Ip.Ip
 			break
 		} else {
 			time.Sleep(5 * time.Second)
 		}
 	}
-	log.Infof("Machine is online! machine_id = %s, IP address = %s", vm_id, Ip)
+	log.Infof("Machine IP address = %s", Ip)
 	d.IPAddress = Ip
-	d.GetSSHKeyPath()
 	return nil
 }
 

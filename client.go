@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"bytes"
+	"strconv"
 )
 
 const poznan_zone_id = "24e12e20-0851-5354-e2c3-04b16c4c9c45"
@@ -115,16 +116,18 @@ func (c* Client) DeleteMachine(vm_id string) (bool, error) {
 }
 
 // Create machine and return machine ID
-func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) (string, error) {
+func (c *Client) CreateMachine(name , cpus, ram string, key_id int) (string, error) {
 	zone_id := ""
 	if c.region == "eu-poland-1warszawa" {
 		zone_id = warsaw_zone_id
 	} else if c.region == "eu-poland-1poznan" {
 		zone_id = poznan_zone_id
 	}
+	cpus_int, err := strconv.Atoi(cpus)
+	ram_int, err := strconv.Atoi(ram)
 	machine := CreateMachine{
-		Cpus: cpus,
-		Ram: ram,
+		Cpus: cpus_int,
+		Ram: ram_int,
 		Zone_id: zone_id,
 		Name: name,
 		Boot_type: "image",

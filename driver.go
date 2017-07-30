@@ -9,6 +9,7 @@ import (
 	"time"
 	"github.com/docker/machine/libmachine/mcnutils"
 	"os"
+	"strconv"
 )
 
 type Driver struct {
@@ -21,6 +22,8 @@ type Driver struct {
 	SSHKeyId   int
 	SSHKeyPath     string
 	SSHKeyName string
+	Cpus	string
+	Ram	string
 }
 
 // Flags - driver params passed from command line
@@ -56,6 +59,18 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Usage: "path to ssh private key for given key name",
 			Value: "",
 		},
+		mcnflag.StringFlag{
+			EnvVar: "E24CLOUD_CPUS",
+			Name: "e24cloud_cpus",
+			Usage: "numer of cpus. Max 16",
+			Value: "1",
+		},
+		mcnflag.StringFlag{
+			EnvVar: "E24CLOUD_RAM",
+			Name: "e24cloud_ram",
+			Usage: "amount of RAM in MB. Max 32000",
+			Value: "512",
+		},
 	}
 }
 
@@ -81,6 +96,20 @@ func (d *Driver) PreCreateCheck() error {
 	if _, err := os.Stat(d.SSHKeyPath); os.IsNotExist(err) {
 		return fmt.Errorf("SSH private key does not exist: %q", d.SSHKeyPath)
 	}
+	cpus, err := strconv.Atoi(d.Cpus)
+	if err != nil {
+		return err
+	}
+	if cpus > 16 {
+		return fmt.Errorf("Max Cpus can be 16")
+	}
+	ram, err := strconv.Atoi(d.Ram)
+	if err != nil {
+		return err
+	}
+	if ram > 32000 {
+		return fmt.Errorf("Max RAM can be 32 GB")
+	}
 	return nil
 }
 
@@ -96,6 +125,8 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.Region = flags.String("e24cloud_region")
 	d.SSHKeyPath = flags.String("e24cloud_sshkeypath")
 	d.SSHKeyName = flags.String("e24cloud_sshkeyname")
+	d.Cpus = flags.String("e24cloud_cpus")
+	d.Ram = flags.String("e24cloud_ram")
 	return nil
 }
 
@@ -153,7 +184,7 @@ func (d *Driver) Create() error {
 		return err
 	}
 
-	vm_id, err := client.CreateMachine(d.MachineName, 1, 512, d.SSHKeyId)
+	vm_id, err := client.CreateMachine(d.MachineName, d.Cpus, d.Ram, d.SSHKeyId)
 	if err != nil {
 		log.Error("Cannot create machine by API")
 		return err
@@ -182,33 +213,24 @@ func (d *Driver) Create() error {
 }
 
 func (d *Driver) Start() error {
-	d.MockState = state.Running
-	return nil
+	return fmt.Errorf("Starting machine needs to be implemented")
 }
 
 func (d *Driver) Stop() error {
-	d.MockState = state.Stopped
-	return nil
+	return fmt.Errorf("Stopping machine needs to be implemented")
 }
 
 func (d *Driver) Restart() error {
-	d.MockState = state.Running
-	return nil
+	return fmt.Errorf("Restarting machine needs to be implemented")
 }
 
 func (d *Driver) Kill() error {
-	d.MockState = state.Stopped
-	log.Info("kill...")
-	return nil
+	return fmt.Errorf("Killing machine is not supported in e24cloud")
 }
 
 func (d *Driver) Remove() error {
 	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
 	client.DeleteMachine(d.InstanceId)
-	return nil
-}
-
-func (d *Driver) Upgrade() error {
 	return nil
 }
 

@@ -7,22 +7,22 @@ import (
 	"github.com/docker/machine/libmachine/mcnflag"
 	"github.com/docker/machine/libmachine/state"
 	"github.com/docker/machine/libmachine/log"
-
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/service/ec2"
-
-	"github.com/aws/aws-sdk-go/aws/endpoints"
+	"time"
+	"github.com/docker/machine/libmachine/ssh"
+	"io/ioutil"
+	"github.com/docker/machine/libmachine/mcnutils"
+	"os"
 )
 
 type Driver struct {
 	*drivers.BaseDriver
-	MockState state.State
-	ApiKey    string
-	ApiSecret    string
-	InstanceId    string
-	Region    string
+	MockState  state.State
+	ApiKey     string
+	ApiSecret  string
+	InstanceId string
+	Region     string
+	SSHKeyId   int
+	SSHKey     string
 }
 
 // Flags - driver params passed from command line
@@ -53,10 +53,12 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.ApiKey = flags.String("e24cloud_apikey")
 	d.ApiSecret = flags.String("e24cloud_apisecret")
 	d.Region = "eu-poland-1warszawa"
+	d.SSHKey = "/home/piotr/Pulpit/id_rsa"
 	return nil
 }
 
 func (d *Driver) GetURL() (string, error) {
+	log.Info("GetURL")
 	ip, err := d.GetIP()
 	if err != nil {
 		return "", err
@@ -68,83 +70,92 @@ func (d *Driver) GetURL() (string, error) {
 }
 
 func (d *Driver) GetSSHHostname() (string, error) {
-	return "", nil
-}
-
-func (d *Driver) GetSSHKeyPath() string {
-	return ""
-}
-
-func (d *Driver) GetSSHPort() (int, error) {
-	return 0, nil
+	log.Info("GetSSHHostname")
+	log.Info(d.GetSSHKeyPath())
+	log.Info(d.GetIP())
+	return d.GetIP()
 }
 
 func (d *Driver) GetSSHUsername() string {
-	return ""
+	log.Info("GetSSHUSername")
+	return "e24"
+}
+
+func (d *Driver) publicSSHKeyPath() string {
+	log.Info("publicSSHKeyPath")
+	return d.GetSSHKeyPath() + ".pub"
+}
+
+func (d *Driver) createSSHKey() (string, error) {
+	if err := ssh.GenerateSSHKey(d.GetSSHKeyPath()); err != nil {
+		return "", err
+	}
+
+	publicKey, err := ioutil.ReadFile(d.publicSSHKeyPath())
+	if err != nil {
+		return "", err
+	}
+
+	return string(publicKey), nil
 }
 
 func (d *Driver) GetState() (state.State, error) {
-	return d.MockState, nil
+	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	machine := client.GetMachine(d.InstanceId)
+	switch machine.State {
+	case "online":
+		return state.Running, nil
+	case "offline":
+		return state.Stopped, nil
+	case "installing":
+		return state.Starting, nil
+	case "deleting":
+		return state.Stopping, nil
+	}
+	return state.None, nil
 }
 
 
 // Create instance
 func (d *Driver) Create() error {
+	log.SetDebug(true)
 	log.Info("Creating e24cloud instance...")
+
+	//log.Info("Creating SSH key...")
+	//key, err := d.createSSHKey()
+	//if err != nil {
+	//	return err
+	//}
+
+
 	// tworzenie klienta
-	//endpoint := "https://eu-poland-1warszawa.api.e24cloud.com"
-	log.Info(d.ApiKey)
-	log.Info(d.ApiSecret)
+	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
 
-	myCustomResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
-		return endpoints.ResolvedEndpoint{
-			URL:           "https://eu-poland-1warszawa.api.e24cloud.com",
-			SigningRegion: "eu-poland-1warszawa",
-		}, nil
-	}
-
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(d.Region),
-		Credentials: credentials.NewStaticCredentials(d.ApiKey, d.ApiSecret, ""),
-		//Endpoint: aws.String(endpoint),
-		EndpointResolver: endpoints.ResolverFunc(myCustomResolver),
-		CredentialsChainVerboseErrors: aws.Bool(true),
-	}))
-
-	log.Info("debug10")
-	svc := ec2.New(sess)
-	log.Info("debug20")
-	//result, err := svc.RunInstances(&ec2.RunInstancesInput{
-	//
-	//})
-	var ids []*string
-	ids = append(ids, aws.String("ami-5731123e"))
-	//ids[0] = aws.String("ami-5731123e")
-
-	output, err := svc.DescribeImages(&ec2.DescribeImagesInput{
-		DryRun: aws.Bool(true),
-		ImageIds: ids,
-	})
-	log.Info("debug30")
-	if err != nil {
-		log.Info("Cannot describe")
-		log.Info(err)
+	d.SSHKeyId = client.GetKeyIdByName("piotrkey")
+	if err := copySSHKey(d.SSHKey, d.GetSSHKeyPath()); err != nil {
 		return err
 	}
-	log.Info("debug40")
-	log.Info(len(output.Images))
-	for _, image := range output.Images {
-		log.Info(image.Name)
-		log.Info(image.ImageId)
-	}
-	log.Info("debug50")
-
-
-
 	// call do api
+	vm_id := client.CreateMachine(d.MachineName, 1, 512, d.SSHKeyId)
+
 	// zapisanie machineId
-	// poczekanie na adres ip i stworzenie maszynki
-	// info o sukcesie
+	d.InstanceId = vm_id
+
+	// poczekanie na adres ip
+	log.Info("Waiting for the ip address...")
+	var Ip string
+	for {
+		machine := client.GetMachine(vm_id)
+		if machine.State == "online" {
+			Ip = machine.Ip.Ip
+			break
+		} else {
+			time.Sleep(5 * time.Second)
+		}
+	}
+	log.Infof("Machine is online! machine_id = %s, IP address = %s", vm_id, Ip)
+	d.IPAddress = Ip
+	d.GetSSHKeyPath()
 	return nil
 }
 
@@ -165,10 +176,13 @@ func (d *Driver) Restart() error {
 
 func (d *Driver) Kill() error {
 	d.MockState = state.Stopped
+	log.Info("kill...")
 	return nil
 }
 
 func (d *Driver) Remove() error {
+	client := GetClient(d.ApiKey, d.ApiSecret, d.Region)
+	client.DeleteMachine(d.InstanceId)
 	return nil
 }
 
@@ -176,3 +190,15 @@ func (d *Driver) Upgrade() error {
 	return nil
 }
 
+// copied from digitalocean driver
+func copySSHKey(src, dst string) error {
+	if err := mcnutils.CopyFile(src, dst); err != nil {
+		return fmt.Errorf("unable to copy ssh key: %s", err)
+	}
+
+	if err := os.Chmod(dst, 0600); err != nil {
+		return fmt.Errorf("unable to set permissions on the ssh key: %s", err)
+	}
+
+	return nil
+}

@@ -32,7 +32,7 @@ type CreateMachine struct {
 	Cdrom string `json:"cdrom,omitempty"`
 	Os string `json:"os"`
 	Password string `json:"password,omitempty"`
-	Key_id string `json:"key_id,omitempty"`
+	Key_id int `json:"key_id,omitempty"`
 	User_data string `json:"user_data,omitempty"`
 }
 
@@ -66,6 +66,20 @@ type CreateMachineResponseId struct {
 	Id string `json:"id"`
 }
 
+type SshKey struct {
+	Id int `json:"id"`
+	Name string `json:"name"`
+}
+
+type Account struct {
+	SshKeys []SshKey `json:"sshkeys"`
+}
+
+type AccountWrapper struct {
+	Success bool `json:"success"`
+	Account Account `json:"account"`
+}
+
 type Success struct {
 	Success bool `json:"success"`
 }
@@ -94,7 +108,7 @@ func (c* Client) DeleteMachine(vm_id string) bool {
 }
 
 // Create machine and return machine ID
-func (c *Client) CreateMachine(name string, cpus, ram int) string {
+func (c *Client) CreateMachine(name string, cpus, ram int, key_id int) string {
 	zone_id := ""
 	if c.region == "eu-poland-1warszawa" {
 		zone_id = warsaw_zone_id
@@ -107,15 +121,17 @@ func (c *Client) CreateMachine(name string, cpus, ram int) string {
 		Zone_id: zone_id,
 		Name: name,
 		Boot_type: "image",
-		Os: "2528", //ubuntu
-		Password: "kali1",
+		Os: "2268", //ubuntu
+		//Password: "kali1",
+		Key_id: key_id,
 	}
 
 	str, err := json.Marshal(CreateMachineWrapper{machine})
 	if err != nil {
-		fmt.Println("Cannot marshal CreateVM struct")
+		fmt.Println("Cannot marshal CreateMachine struct")
 	}
 
+	fmt.Println(string(str))
 	response := c.SendRequest("virtual-machines", "PUT", str)
 
 	var r CreateMachineResponse
@@ -139,6 +155,24 @@ func (c *Client) GetTemplates() string {
 	return string(response)
 }
 
+func (c *Client) GetAccount() Account {
+	response := string(c.SendRequest("account", "GET", []byte("")))
+	var account AccountWrapper
+	json.Unmarshal([]byte(response), &account)
+	return account.Account
+}
+
+func (c *Client) GetKeyIdByName(keyName string) int {
+	account := c.GetAccount()
+	for {
+		sshkey := account.SshKeys[0]
+		if sshkey.Name == keyName {
+			return sshkey.Id
+		}
+	}
+	return 0
+}
+
 func (c *Client) SendRequest(path, method string, reqBody []byte) []byte {
 	req := GetRequest(method, c.url + path, c.apiKey, c.apiSecret, reqBody)
 
@@ -151,6 +185,10 @@ func (c *Client) SendRequest(path, method string, reqBody []byte) []byte {
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
+	//fmt.Println(string(body))
+	if err != nil {
+		fmt.Println(err)
+	}
 	return body
 }
 
